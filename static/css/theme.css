@@ -1,0 +1,718 @@
+/* ==========================================================================
+   PIRNAV "Potluck Week 2026" theme
+   --------------------------------------------------------------------------
+   Festive Indian-celebration look: marigold garlands, brass lamps, rangoli.
+   - Mobile first; breakpoints at 640px and 960px.
+   - Pure CSS decoration (no external images or fonts required).
+   - Text contrast targets WCAG AA. Dark text is used on the marigold primary
+     colour because white on #E8551E is below 4.5:1.
+   Sections:
+     1. Design tokens      6. Category chips     11. Forms & buttons
+     2. Base / reset       7. Feature tiles      12. Share box
+     3. Layout & header    8. Tabs               13. Status / empty / toast
+     4. Footer             9. Item cards         14. Breakpoints
+     5. Hero / banner     10. People             15. Reduced motion
+   ========================================================================== */
+
+/* 1. Design tokens -------------------------------------------------------- */
+:root {
+  /* Palette (from design.md) */
+  --color-primary: #E8551E;          /* marigold orange */
+  --color-primary-dark: #C2410C;     /* hover / pressed */
+  --color-secondary: #9C1C3C;        /* deep maroon */
+  --color-secondary-dark: #741329;
+  --color-accent-green: #2E7D4F;     /* success */
+  --color-accent-yellow: #F2B705;    /* turmeric / gold */
+  --color-teal: #14575A;             /* dark teal-green brush stroke */
+  --color-purple: #6A3FA0;           /* team games icon */
+  --color-bg: #FFF8EE;               /* warm cream */
+  --color-surface: #FFFFFF;
+  --color-text: #1F1A17;
+  --color-text-muted: #5C514A;       /* AA on cream and white */
+  --color-border: #EBD9C2;
+  --color-error: #B3261E;
+
+  /* Status badges */
+  --color-taken-bg: #E3F6EA;
+  --color-taken-text: #176B32;
+  --color-available: #8A8A8A;        /* decorative grey (dots, borders) */
+  --color-available-bg: #ECECEC;
+  --color-available-text: #555555;   /* AA on #ECECEC */
+
+  /* Type */
+  --font-body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Baloo 2", "Fredoka", "Trebuchet MS", system-ui, sans-serif;
+  --font-script: "Segoe Script", "Brush Script MT", "Comic Sans MS", cursive;
+
+  /* Shape & depth */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+  --shadow-soft: 0 2px 8px rgba(156, 28, 60, 0.08);
+  --shadow-lift: 0 6px 18px rgba(156, 28, 60, 0.16);
+  --tap-size: 44px;
+}
+
+/* 2. Base / reset --------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  /* Subtle rangoli-like pattern at very low opacity (pure CSS) */
+  background-image:
+    radial-gradient(circle at 20px 20px, rgba(232, 85, 30, 0.07) 0 3px, transparent 4px),
+    radial-gradient(circle at 20px 20px, rgba(156, 28, 60, 0.05) 0 10px, transparent 11px),
+    radial-gradient(circle at 60px 60px, rgba(242, 183, 5, 0.09) 0 3px, transparent 4px),
+    radial-gradient(circle at 60px 60px, rgba(46, 125, 79, 0.04) 0 12px, transparent 13px);
+  background-size: 80px 80px;
+}
+
+img { max-width: 100%; display: block; }
+
+h1, h2, h3 { font-family: var(--font-display); line-height: 1.2; margin: 0 0 0.5rem; }
+p { margin: 0 0 0.75rem; }
+
+a { color: var(--color-secondary); text-underline-offset: 2px; }
+a:hover { color: var(--color-secondary-dark); }
+
+/* Visible keyboard focus everywhere */
+:focus-visible {
+  outline: 3px solid var(--color-secondary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+[hidden] { display: none !important; }
+
+/* 3. Layout & header ------------------------------------------------------ */
+.page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.container {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.page > .container { flex: 1 0 auto; }
+
+.site-header {
+  position: relative;
+  background: var(--color-secondary);
+  color: #fff;
+  padding-top: 18px; /* room for the garland strip */
+}
+
+/* Marigold garland: alternating orange/yellow beads over a green "thread" */
+.site-header::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 18px;
+  background-color: var(--color-accent-green);
+  background-image:
+    radial-gradient(circle at 9px 9px, var(--color-primary) 0 6px, transparent 6.5px),
+    radial-gradient(circle at 27px 9px, var(--color-accent-yellow) 0 6px, transparent 6.5px);
+  background-size: 36px 18px;
+  background-repeat: repeat-x;
+}
+
+.site-header .container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.125rem;
+  letter-spacing: 0.02em;
+  color: #fff;
+  text-decoration: none;
+}
+.brand:hover { color: var(--color-accent-yellow); }
+.brand:focus-visible { outline-color: var(--color-accent-yellow); }
+.brand img { height: 32px; width: auto; }
+
+/* 4. Footer --------------------------------------------------------------- */
+.site-footer {
+  position: relative;
+  margin-top: 2rem;
+  padding: 1.5rem 1rem 1.25rem;
+  text-align: center;
+  font-size: 0.875rem;
+  color: #fff;
+  background: var(--color-secondary);
+}
+.site-footer::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 10px;
+  background-image: radial-gradient(circle at 8px 0, var(--color-accent-yellow) 0 7px, transparent 7.5px);
+  background-size: 16px 10px;
+  background-repeat: repeat-x;
+}
+.site-footer a { color: var(--color-accent-yellow); }
+
+/* 5. Hero / banner -------------------------------------------------------- */
+.hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  padding: 1.5rem 1rem;
+  text-align: center;
+  color: var(--color-text);
+  /* Fallback look when the banner image is missing */
+  background:
+    radial-gradient(circle at 15% 10%, rgba(242, 183, 5, 0.35), transparent 45%),
+    radial-gradient(circle at 90% 90%, rgba(232, 85, 30, 0.25), transparent 50%),
+    linear-gradient(160deg, #FFF3DC 0%, #FFE2BD 55%, #F4B7A0 100%);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-soft);
+}
+
+/* When an image is present it fills the hero; text content sits below it. */
+.hero-image {
+  display: block;
+  width: 100%;
+  max-height: 420px;
+  object-fit: cover;
+  border-radius: var(--radius-lg);
+}
+.hero > .hero-image:first-child { margin: -1.5rem -1rem 1rem; width: calc(100% + 2rem); max-width: none; border-radius: 0; }
+
+.hero-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+}
+
+/* Multi-colour rounded display lettering: P O T L U C K */
+.wordmark {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.04em;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(2.5rem, 13vw, 5rem);
+  line-height: 1;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.wordmark-letter {
+  display: inline-block;
+  -webkit-text-stroke: 1px rgba(31, 26, 23, 0.25);
+  text-shadow: 0 3px 0 rgba(31, 26, 23, 0.18);
+  transition: transform 0.2s ease;
+}
+.wordmark-letter:hover { transform: translateY(-3px) rotate(-3deg); }
+.wordmark-letter.l1 { color: #14575A; }   /* teal / navy */
+.wordmark-letter.l2 { color: #9C1C3C; }   /* maroon */
+.wordmark-letter.l3 { color: #E8551E; }   /* orange */
+.wordmark-letter.l4 { color: #2E7D4F; }   /* green */
+.wordmark-letter.l5 { color: #D6336C; }   /* pink */
+.wordmark-letter.l6 { color: #1E3A8A; }   /* dark blue */
+.wordmark-letter.l7 { color: #F2B705; }   /* gold (optional 7th) */
+
+/* "Week 2026" in script over a turmeric brush stroke */
+.hero-subtitle {
+  display: inline-block;
+  margin: 0.25rem 0 0.75rem;
+  padding: 0.1em 1.25em;
+  font-family: var(--font-script);
+  font-size: clamp(1.5rem, 7vw, 2.25rem);
+  font-weight: 700;
+  color: var(--color-text);
+  background: linear-gradient(100deg, transparent 0, var(--color-accent-yellow) 8%, #F7CB3E 50%, var(--color-accent-yellow) 92%, transparent 100%);
+  border-radius: 40% 60% 55% 45% / 60% 45% 55% 40%;
+  transform: rotate(-1.5deg);
+}
+
+.hero-tagline {
+  margin: 0 auto 1rem;
+  max-width: 34rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-secondary-dark);
+}
+
+/* Maroon pill for the event dates */
+.date-pill {
+  display: inline-block;
+  margin: 0 0 1rem;
+  padding: 0.5rem 1.25rem;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1rem;
+  color: #fff;
+  background: var(--color-secondary);
+  border: 2px solid var(--color-accent-yellow);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-soft);
+}
+
+/* Dark teal brush-stroke closing tagline */
+.closing-tagline {
+  display: block;
+  margin: 1rem auto 0;
+  max-width: 38rem;
+  padding: 0.75rem 1.5rem;
+  font-family: var(--font-script);
+  font-size: 1.125rem;
+  font-weight: 700;
+  text-align: center;
+  color: #fff;
+  background: linear-gradient(95deg, transparent 0, var(--color-teal) 4%, #1C6E71 50%, var(--color-teal) 96%, transparent 100%);
+  border-radius: 45% 55% 50% 50% / 30% 30% 40% 40%;
+}
+
+/* 6. Category chips ------------------------------------------------------- */
+.category-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1rem;
+  margin: 1.25rem 0 0.5rem;
+  padding: 0;
+  list-style: none;
+}
+.category {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.375rem;
+  width: 5.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-align: center;
+  color: var(--color-text);
+}
+.category-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  font-size: 1.5rem;
+  color: #fff;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  box-shadow: var(--shadow-soft);
+}
+.category.attire .category-icon     { background: var(--color-secondary); }
+.category.potluck .category-icon    { background: var(--color-primary-dark); } /* orange, darkened for contrast */
+.category.activities .category-icon { background: var(--color-accent-green); }
+.category.games .category-icon      { background: var(--color-purple); }
+
+/* 7. Feature tiles -------------------------------------------------------- */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 1.25rem 0;
+  padding: 0;
+  list-style: none;
+}
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 1rem 0.75rem;
+  text-align: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-top: 4px solid var(--color-primary);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.tile:hover { transform: translateY(-2px); box-shadow: var(--shadow-lift); }
+.tile:nth-child(2) { border-top-color: var(--color-secondary); }
+.tile:nth-child(3) { border-top-color: var(--color-accent-green); }
+.tile:nth-child(4) { border-top-color: var(--color-accent-yellow); }
+.tile-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  font-size: 1.5rem;
+  background: var(--color-bg);
+  border: 2px dashed var(--color-accent-yellow);
+  border-radius: 50%;
+}
+.tile-title { margin: 0; font-size: 1rem; font-weight: 700; }
+.tile-desc  { margin: 0; font-size: 0.875rem; color: var(--color-text-muted); }
+
+/* 8. Tabs ----------------------------------------------------------------- */
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1.25rem 0 1rem;
+  padding: 0.25rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+}
+.tab {
+  flex: 1;
+  min-height: var(--tap-size);
+  padding: 0.5rem 1rem;
+  font: inherit;
+  font-weight: 700;
+  color: var(--color-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.tab:hover { background: #FBE9D6; }
+.tab.active {
+  color: var(--color-text);              /* dark on marigold = AA */
+  background: var(--color-primary);
+  box-shadow: inset 0 -3px 0 rgba(31, 26, 23, 0.2);
+}
+.tab-panel { animation: fade-in 0.2s ease; }
+.tab-panel[hidden] { display: none; }
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* 9. Item cards ----------------------------------------------------------- */
+.items {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.item-card {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: center;
+  gap: 0.875rem;
+  padding: 0.75rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-soft);
+}
+.item-image {
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+}
+/* Placeholder: cream square with a centered food emoji (set as text content) */
+.item-image.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.5rem;
+  line-height: 1;
+  background: #FFF1D6;
+  border: 1px dashed var(--color-accent-yellow);
+}
+.item-body { min-width: 0; }
+.item-title {
+  margin: 0 0 0.125rem;
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.item-bringing {
+  margin: 0 0 0.5rem;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.4;
+  border-radius: var(--radius-pill);
+}
+.badge.taken {
+  color: var(--color-taken-text);
+  background: var(--color-taken-bg);
+  border: 1px solid #A9DDBB;
+}
+.badge.available {
+  color: var(--color-available-text);
+  background: var(--color-available-bg);
+  border: 1px solid #D0D0D0;
+}
+
+/* 10. People -------------------------------------------------------------- */
+.people-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.person-card {
+  padding: 0.875rem 1rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-left: 5px solid var(--color-secondary);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-soft);
+}
+.person-name {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: var(--color-secondary);
+}
+.person-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.person-items > * {
+  padding: 0.25rem 0.75rem;
+  font-size: 0.875rem;
+  background: #FFF1D6;
+  border: 1px solid var(--color-accent-yellow);
+  border-radius: var(--radius-pill);
+}
+
+/* 11. Forms & buttons ----------------------------------------------------- */
+.form {
+  display: grid;
+  gap: 0.875rem;
+  padding: 1rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
+}
+.field { display: grid; gap: 0.25rem; }
+
+label {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  min-height: var(--tap-size);
+  padding: 0.5rem 0.75rem;
+  font: inherit;
+  color: var(--color-text);
+  background: #fff;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+input::placeholder, textarea::placeholder { color: #6F645C; }
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 3px solid var(--color-secondary);
+  outline-offset: 1px;
+  border-color: var(--color-secondary);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  min-height: var(--tap-size);
+  padding: 0.5rem 1.25rem;
+  font: inherit;
+  font-weight: 700;
+  line-height: 1.2;
+  text-decoration: none;
+  cursor: pointer;
+  border: 2px solid transparent;
+  border-radius: var(--radius-pill);
+  transition: background-color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+}
+.btn:active { transform: translateY(1px); }
+.btn[disabled], .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.btn-primary {
+  color: var(--color-text);              /* dark on marigold = AA (4.8:1) */
+  background: var(--color-primary);
+  box-shadow: 0 3px 0 var(--color-primary-dark);
+}
+.btn-primary:hover:not(:disabled) { background: #F26A35; }
+
+.btn-secondary {
+  color: var(--color-secondary);
+  background: transparent;
+  border-color: var(--color-secondary);
+}
+.btn-secondary:hover:not(:disabled) { color: #fff; background: var(--color-secondary); }
+
+.btn-small {
+  min-height: var(--tap-size);           /* keep the 44px touch target */
+  padding: 0.25rem 0.875rem;
+  font-size: 0.875rem;
+}
+
+/* Unclaim / destructive-but-gentle action */
+.btn-danger-ghost {
+  color: var(--color-error);
+  background: transparent;
+  border-color: transparent;
+  text-decoration: underline;
+}
+.btn-danger-ghost:hover:not(:disabled) { background: #FCEBEA; border-color: var(--color-error); }
+
+.form-error {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-error);
+}
+.form-error:empty { display: none; }
+
+/* 12. Share box ----------------------------------------------------------- */
+.share-box {
+  display: grid;
+  gap: 0.625rem;
+  padding: 1rem;
+  background: #FFF1D6;
+  border: 2px dashed var(--color-accent-yellow);
+  border-radius: var(--radius-lg);
+}
+.share-link {
+  width: 100%;
+  min-height: var(--tap-size);
+  padding: 0.5rem 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.875rem;
+  color: var(--color-text);
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 13. Status / empty / toast --------------------------------------------- */
+.empty-state {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.connection-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: var(--radius-pill);
+}
+.connection-status::before {
+  content: "";
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 50%;
+  background: var(--color-available);
+}
+.connection-status.online::before  { background: #2E7D4F; box-shadow: 0 0 0 3px rgba(46, 125, 79, 0.25); }
+.connection-status.offline::before { background: var(--color-error); box-shadow: 0 0 0 3px rgba(179, 38, 30, 0.25); }
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 1.25rem;
+  z-index: 1000;
+  max-width: calc(100% - 2rem);
+  padding: 0.75rem 1.25rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--color-text);
+  border-left: 5px solid var(--color-accent-yellow);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lift);
+  transform: translateX(-50%);
+  animation: toast-in 0.25s ease;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translate(-50%, 12px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* 14. Breakpoints --------------------------------------------------------- */
+@media (min-width: 640px) {
+  .container { padding: 1.5rem; }
+  .hero { padding: 2rem 1.5rem; }
+  .hero > .hero-image:first-child { margin: -2rem -1.5rem 1.25rem; width: calc(100% + 3rem); }
+  .hero-tagline { font-size: 1.125rem; }
+  .category { width: 7rem; font-size: 0.875rem; }
+  .category-icon { width: 64px; height: 64px; font-size: 1.75rem; }
+  .items,
+  .people-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .share-box { grid-template-columns: 1fr auto; align-items: center; }
+  .toast { left: auto; right: 1.5rem; transform: none; }
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: none; }
+  }
+}
+
+@media (min-width: 960px) {
+  .tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .items { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .people-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .hero { padding: 2.5rem 2rem; }
+  .hero > .hero-image:first-child { margin: -2.5rem -2rem 1.5rem; width: calc(100% + 4rem); }
+}
+
+/* 15. Reduced motion ------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .wordmark-letter:hover,
+  .tile:hover { transform: none; }
+}

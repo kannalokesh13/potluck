@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: realtime-potluck-planner
+    runtime: python
+    plan: free
+    # Ohio is next to the Neon database (AWS us-east-2), so queries are fast.
+    region: ohio
+    buildCommand: pip install -r requirements.txt
+    # One worker only: the WebSocket hub and claim locks are in-process.
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.11
+      # Secret: enter the Neon connection string in the Render dashboard.
+      # It must never be committed to the repo.
+      - key: DATABASE_URL
+        sync: false

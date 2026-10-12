@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="PIRNAV Potluck Week 2026: add dishes, pick what you will bring and see live status.">
+  <title>Potluck Week 2026 | PIRNAV</title>
+  <link rel="stylesheet" href="/static/css/theme.css">
+  <style>
+    /* Page-specific helpers (kept here so theme.css stays untouched). */
+
+    /* Tiles are links/buttons: neutralise default link styling. */
+    a.tile { color: inherit; text-decoration: none; cursor: pointer; }
+    a.tile:focus-visible { outline: 3px solid var(--color-secondary); outline-offset: 2px; }
+
+    /* When the real banner image has loaded it already contains the hero text,
+       so visually hide the duplicated pieces. They stay in the accessibility
+       tree for screen readers (visually-hidden technique, not display:none). */
+    .hero.has-banner .wordmark,
+    .hero.has-banner .hero-subtitle,
+    .hero.has-banner .hero-tagline,
+    .hero.has-banner .date-pill,
+    .hero.has-banner .category-row,
+    .hero.has-banner .closing-tagline {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      border: 0;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+    .hero.has-banner { padding-bottom: 0; }
+    .hero.has-banner > .hero-image:first-child { margin-bottom: 0; }
+
+    .name-form .hint, .panel-note { margin: 0; font-size: 0.875rem; color: var(--color-text-muted); }
+    .board-summary { margin: 0 0 0.75rem; font-weight: 600; }
+    .section-title { font-size: 1.25rem; margin: 1.5rem 0 0.75rem; }
+    .suggestions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    .item-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
+    .share-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    .people-meta { margin: 0 0 0.75rem; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="site-header">
+      <div class="container">
+        <span class="brand">PIRNAV Software Solutions</span>
+        <span class="connection-status" id="connection-status" aria-live="polite">Connecting...</span>
+      </div>
+    </header>
+
+    <main class="container" id="main">
+      <!-- Hero / banner -->
+      <section class="hero" id="hero" aria-label="Potluck Week 2026">
+        <img class="hero-image"
+             src="/static/images/potluck-banner.png"
+             alt="PIRNAV Potluck Week 2026 - A celebration of food, culture, tradition and togetherness. 12th to 16th October 2026"
+             onload="this.closest('.hero').classList.add('has-banner')"
+             onerror="this.style.display='none'">
+        <h1 class="hero-title">
+          <span class="wordmark" role="img" aria-label="Potluck"><span class="wordmark-letter l1" aria-hidden="true">P</span><span class="wordmark-letter l2" aria-hidden="true">O</span><span class="wordmark-letter l3" aria-hidden="true">T</span><span class="wordmark-letter l4" aria-hidden="true">L</span><span class="wordmark-letter l5" aria-hidden="true">U</span><span class="wordmark-letter l6" aria-hidden="true">C</span><span class="wordmark-letter l7" aria-hidden="true">K</span></span>
+        </h1>
+        <p class="hero-subtitle">Week 2026</p>
+        <p class="hero-tagline">A Celebration of Food, Culture, Tradition &amp; Togetherness</p>
+        <p class="date-pill">12th &ndash; 16th October 2026</p>
+        <ul class="category-row">
+          <li class="category attire"><span class="category-icon" aria-hidden="true">&#x1F458;</span><span>Traditional Attire</span></li>
+          <li class="category potluck"><span class="category-icon" aria-hidden="true">&#x1F372;</span><span>Potluck</span></li>
+          <li class="category activities"><span class="category-icon" aria-hidden="true">&#x1F3A8;</span><span>Fun Activities</span></li>
+          <li class="category games"><span class="category-icon" aria-hidden="true">&#x1F3C6;</span><span>Team Games</span></li>
+        </ul>
+        <p class="closing-tagline">Come together, share a little, celebrate a lot!</p>
+      </section>
+
+      <!-- Feature tiles -->
+      <nav class="tiles" aria-label="Quick actions">
+        <a class="tile" href="#add" data-goto="add">
+          <span class="tile-icon" aria-hidden="true">&#x1F37D;&#xFE0F;</span>
+          <span class="tile-title">Add Food Items</span>
+          <span class="tile-desc">Biryani, snacks, sweets, drinks, etc.</span>
+        </a>
+        <a class="tile" href="#my-name" data-goto="name">
+          <span class="tile-icon" aria-hidden="true">&#x1F64B;</span>
+          <span class="tile-title">Add Your Name</span>
+          <span class="tile-desc">Who is bringing which item?</span>
+        </a>
+        <a class="tile" href="#items" data-goto="items">
+          <span class="tile-icon" aria-hidden="true">&#x2705;</span>
+          <span class="tile-title">Live Item Status</span>
+          <span class="tile-desc">Taken items and available items.</span>
+        </a>
+        <a class="tile" href="#share" data-goto="share">
+          <span class="tile-icon" aria-hidden="true">&#x1F517;</span>
+          <span class="tile-title">Share with Office</span>
+          <span class="tile-desc">One link for all colleagues.</span>
+        </a>
+      </nav>
+
+      <!-- Identity (no sign-in: the name is stored on this device only) -->
+      <form class="form name-form" id="name-form" novalidate>
+        <div class="field">
+          <label for="my-name">Your name</label>
+          <input type="text" id="my-name" name="name" maxlength="60" autocomplete="name"
+                 placeholder="e.g. Ravi" aria-describedby="name-hint name-error">
+          <p class="hint" id="name-hint">Used when you pick an item. Saved on this device.</p>
+          <p class="form-error" id="name-error" role="alert"></p>
+        </div>
+      </form>
+
+      <!-- Tabs -->
+      <div class="tabs" role="tablist" aria-label="Potluck board sections">
+        <button type="button" class="tab active" role="tab" id="tab-items" data-tab="items"
+                aria-selected="true" aria-controls="panel-items">Items</button>
+        <button type="button" class="tab" role="tab" id="tab-people" data-tab="people"
+                aria-selected="false" aria-controls="panel-people" tabindex="-1">People</button>
+        <button type="button" class="tab" role="tab" id="tab-share" data-tab="share"
+                aria-selected="false" aria-controls="panel-share" tabindex="-1">Share</button>
+      </div>
+
+      <!-- Items panel: status board + add form -->
+      <section class="tab-panel" id="panel-items" role="tabpanel" aria-labelledby="tab-items">
+        <p class="board-summary" id="items-summary" aria-live="polite"></p>
+        <p class="form-error" id="items-error" role="alert"></p>
+        <p class="empty-state" id="items-empty" hidden>No items yet. Add the first dish!</p>
+        <ul class="items" id="items-list"></ul>
+
+        <h2 class="section-title" id="add-heading">Add a dish</h2>
+        <form class="form" id="add-form" novalidate aria-labelledby="add-heading">
+          <div class="field">
+            <label for="item-title">Food item</label>
+            <input type="text" id="item-title" name="title" required maxlength="80"
+                   placeholder="e.g. Chicken / Veg Biryani" autocomplete="off">
+          </div>
+          <div class="suggestions" role="group" aria-label="Quick suggestions">
+            <button type="button" class="btn btn-small btn-secondary" data-suggest="Biryani">Biryani</button>
+            <button type="button" class="btn btn-small btn-secondary" data-suggest="Snacks">Snacks</button>
+            <button type="button" class="btn btn-small btn-secondary" data-suggest="Sweets">Sweets</button>
+            <button type="button" class="btn btn-small btn-secondary" data-suggest="Drinks">Drinks</button>
+            <button type="button" class="btn btn-small btn-secondary" data-suggest="Salad">Salad</button>
+            <button type="button" class="btn btn-small btn-secondary" data-suggest="Raita">Raita</button>
+          </div>
+          <div class="field">
+            <label for="item-image">Image link (optional)</label>
+            <input type="url" id="item-image" name="image_url" placeholder="https://..." autocomplete="off">
+          </div>
+          <p class="form-error" id="add-error" role="alert"></p>
+          <button type="submit" class="btn btn-primary" id="add-submit">Add item</button>
+        </form>
+      </section>
+
+      <!-- People panel -->
+      <section class="tab-panel" id="panel-people" role="tabpanel" aria-labelledby="tab-people" hidden>
+        <p class="people-meta" id="people-meta" aria-live="polite"></p>
+        <p class="empty-state" id="people-empty" hidden>Nobody has picked an item yet.</p>
+        <ul class="people-list" id="people-list"></ul>
+      </section>
+
+      <!-- Share panel -->
+      <section class="tab-panel" id="panel-share" role="tabpanel" aria-labelledby="tab-share" hidden>
+        <div class="share-box">
+          <div class="field">
+            <label for="share-link">Board link</label>
+            <input type="text" class="share-link" id="share-link" readonly>
+          </div>
+          <div class="share-actions">
+            <button type="button" class="btn btn-primary" id="copy-link">Copy link</button>
+            <button type="button" class="btn btn-secondary" id="web-share" hidden>Share...</button>
+          </div>
+        </div>
+        <p class="panel-note" id="share-note">Anyone with this link can add items and pick what they will bring. There is no sign-in, so share it only with your office colleagues.</p>
+        <p class="form-error" id="share-error" role="alert"></p>
+      </section>
+
+      <div id="toast-region" role="status" aria-live="polite"></div>
+    </main>
+
+    <footer class="site-footer">
+      <p>PIRNAV Software Solutions &middot; Potluck Week 2026</p>
+    </footer>
+  </div>
+
+  <script type="module" src="/static/js/app.js"></script>
+</body>
+</html>
