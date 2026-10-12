@@ -77,7 +77,7 @@ Only do this on a network you trust, because the app has no authentication.
 Save the PIRNAV Potluck Week 2026 banner at exactly this path and name:
 
 ```
-static/images/potluck-banner.png
+static/images/potluck-banner.jpeg
 ```
 
 When the file is present it is used as the main hero image. When it is missing, the page shows a CSS-built version of the same theme, so nothing breaks.
@@ -98,7 +98,7 @@ static/
   index.html       Single-page frontend
   css/theme.css    Potluck Week theme
   js/              Frontend API and realtime client modules
-  images/          Put potluck-banner.png here
+  images/          Holds potluck-banner.jpeg (hero image)
 tests/             Test package
 requirements.txt   Pinned dependencies
 ```

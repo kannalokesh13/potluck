@@ -33,6 +33,8 @@
       clip-path: inset(50%);
       white-space: nowrap;
     }
+    /* Show the whole banner: no cropping of the logo at the top or the tagline at the bottom. */
+    .hero.has-banner .hero-image { max-height: none; height: auto; object-fit: contain; }
     .hero.has-banner { padding-bottom: 0; }
     .hero.has-banner > .hero-image:first-child { margin-bottom: 0; }
 
@@ -58,7 +60,7 @@
       <!-- Hero / banner -->
       <section class="hero" id="hero" aria-label="Potluck Week 2026">
         <img class="hero-image"
-             src="/static/images/potluck-banner.png"
+             src="/static/images/potluck-banner.jpeg"
              alt="PIRNAV Potluck Week 2026 - A celebration of food, culture, tradition and togetherness. 12th to 16th October 2026"
              onload="this.closest('.hero').classList.add('has-banner')"
              onerror="this.style.display='none'">
