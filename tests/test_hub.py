@@ -5,8 +5,14 @@ from __future__ import annotations
 import asyncio
 import json
 
-from app.hub import WebSocketHub
-from app.models import ChangeEvent, ChangeType, Item
+from app.hub import WebSocketHub, event_to_dict, event_to_json, item_to_dict
+from app.models import (
+    BoardState,
+    ChangeEvent,
+    ChangeType,
+    Item,
+    PersonContribution,
+)
 from tests.conftest import FailingConnection, FakeConnection
 
 
@@ -28,6 +34,60 @@ def test_broadcast_reaches_all_subscribers_and_none_on_other_boards():
     assert len(a.sent) == 1 and len(b.sent) == 1
     assert other.sent == []
     assert a.sent == b.sent
+
+
+PUBLIC_KEYS = {
+    "id", "board_id", "title", "image_url", "claimed_by",
+    "created_at", "status", "added_by", "employee_id", "bring_date",
+}  # fmt: skip
+
+
+def _new_item(employee_id: str = "EMP-SECRET-42") -> Item:
+    return Item(
+        "i1", "b1", "Biryani", None, None, 1.0,
+        added_by="Asha", employee_id=employee_id, bring_date="2026-10-12",
+    )  # fmt: skip
+
+
+def test_item_to_dict_has_exact_public_keys_including_employee_id():
+    d = item_to_dict(_new_item())
+    assert set(d) == PUBLIC_KEYS
+    assert d["employee_id"] == "EMP-SECRET-42"
+    assert d["added_by"] == "Asha"
+    assert d["bring_date"] == "2026-10-12"
+
+
+def test_item_to_dict_legacy_item_has_none_for_new_public_fields():
+    d = item_to_dict(Item("i1", "b1", "Biryani", None, None, 1.0))
+    assert set(d) == PUBLIC_KEYS
+    assert d["added_by"] is None
+    assert d["employee_id"] is None
+    assert d["bring_date"] is None
+
+
+def test_reprs_do_not_contain_employee_id():
+    item = _new_item()
+    claimed = _new_item()
+    claimed.claimed_by = "Ravi"
+    texts = [
+        repr(item),
+        repr(BoardState("b1", [item], [PersonContribution("Ravi", [claimed])])),
+        repr(PersonContribution("Ravi", [claimed])),
+        repr(ChangeEvent(ChangeType.ITEM_ADDED, "b1", item)),
+    ]
+    for text in texts:
+        assert "EMP-SECRET-42" not in text
+
+
+def test_item_deleted_event_shape_includes_employee_id():
+    event = ChangeEvent(ChangeType.ITEM_DELETED, "b1", _new_item())
+    d = event_to_dict(event)
+    assert set(d) == {"type", "board_id", "item"}
+    assert d["type"] == "ItemDeleted"
+    assert d["board_id"] == "b1"
+    assert set(d["item"]) == PUBLIC_KEYS
+    assert d["item"]["employee_id"] == "EMP-SECRET-42"
+    assert json.loads(event_to_json(event))["item"]["employee_id"] == "EMP-SECRET-42"
 
 
 def test_broadcast_with_no_subscribers_is_noop():

@@ -16,7 +16,11 @@ broadcasts nothing.
 
 from __future__ import annotations
 
+import datetime
+import hmac
+import re
 import time
+from typing import Any
 
 # Re-export domain exceptions for convenience to service-layer consumers.
 from .exceptions import (  # noqa: F401
@@ -34,6 +38,73 @@ from .models import (
     PersonContribution,
 )
 from .store import BoardStore, generate_item_id
+
+
+TITLE_MAX = 100
+ADDED_BY_MAX = 60
+EMPLOYEE_ID_MAX = 30
+
+# Strict ASCII shape checked before ``fromisoformat``, which on Python 3.11+
+# also accepts shapes such as ``20261012`` or ``2026-W41-1`` (Req 9.5).
+_DATE_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+
+# One constant message for every rejected-ownership delete, independent of the
+# stored and submitted ids (Req 11.5).
+DELETE_FORBIDDEN_MESSAGE = "You are not allowed to delete this item."
+
+
+def _require_text(value: Any, label: str, max_len: int) -> str:
+    """Validate and trim a required text field.
+
+    Raises :class:`ValidationError` for non-string, blank or over-long values.
+    Messages name the field only; they never include the submitted value.
+    """
+    if not isinstance(value, str):
+        raise ValidationError(f"{label} is required.")
+    trimmed = value.strip()
+    if not trimmed:
+        raise ValidationError(f"{label} must not be empty.")
+    if len(trimmed) > max_len:
+        raise ValidationError(f"{label} must be at most {max_len} characters long.")
+    return trimmed
+
+
+def _require_date(value: Any, label: str = "Date") -> str:
+    """Validate a ``YYYY-MM-DD`` calendar date and return the trimmed string."""
+    if not isinstance(value, str):
+        raise ValidationError(f"{label} is required.")
+    trimmed = value.strip()
+    if not trimmed:
+        raise ValidationError(f"{label} must not be empty.")
+    if _DATE_RE.fullmatch(trimmed) is None:
+        raise ValidationError(f"{label} must be a valid date in YYYY-MM-DD format.")
+    try:
+        datetime.date.fromisoformat(trimmed)
+    except ValueError:
+        raise ValidationError(
+            f"{label} must be a valid date in YYYY-MM-DD format."
+        ) from None
+    return trimmed
+
+
+def _norm_id(value: Any) -> str | None:
+    """Normalize an employee id for comparison (trim + casefold).
+
+    ``None``, blank and non-string values count as missing (``None``).
+    """
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().casefold()
+    return normalized or None
+
+
+def _ids_match(stored: Any, submitted: Any) -> bool:
+    """Constant-time comparison of two normalized employee ids."""
+    a = _norm_id(stored)
+    b = _norm_id(submitted)
+    if a is None or b is None:
+        return False
+    return hmac.compare_digest(a.encode("utf-8"), b.encode("utf-8"))
 
 
 class PotluckService:
@@ -69,38 +140,35 @@ class PotluckService:
     # Mutations
     # ------------------------------------------------------------------
     async def add_item(
-        self, board_id: str, title: str, image_url: str | None = None
+        self,
+        board_id: str,
+        title: Any,
+        added_by: Any,
+        employee_id: Any,
+        bring_date: Any,
+        image_url: str | None = None,
     ) -> Item:
         """Add a new food item to a board and broadcast ``ItemAdded``.
 
-        Implements the design's ``add_item`` specification and Requirements
-        1.1, 1.2, 1.3, 7.1, 7.3.
+        Implements Requirements 1.1, 1.2, 1.3, 7.1, 7.3 and 9.1 to 9.7, 9.11.
 
-        Behavior:
-        - Validates the title: ``title.strip()`` must be non-empty, otherwise
-          a :class:`ValidationError` is raised with no state change and no
-          broadcast (Req 7.1).
-        - Lazily creates the board if it does not already exist.
-        - Creates exactly one new :class:`Item` with a unique id, the trimmed
-          title (Req 7.3), the optional ``image_url`` (Req 1.3), ``claimed_by``
-          unset (so derived status is Available), and the current timestamp.
-          No existing item is modified (Req 1.1).
-        - Persists the item so it is retrievable in the snapshot (Req 1.2).
-        - Awaits exactly one ``ItemAdded`` broadcast, then returns the item.
-
-        Args:
-            board_id: Target board id.
-            title: Proposed item title (validated and trimmed).
-            image_url: Optional image reference associated with the item.
-
-        Returns:
-            The newly created, Available :class:`Item`.
+        All four values (title <= 100, added_by <= 60, employee_id <= 30 and a
+        real ``YYYY-MM-DD`` date) are validated and trimmed BEFORE the store is
+        touched, so a rejected request creates no board, changes no state and
+        broadcasts nothing. The trimmed values are stored on the new Available
+        item and exactly one ``ItemAdded`` event is broadcast.
 
         Raises:
-            ValidationError: If the trimmed title is empty.
+            ValidationError: If any of the four values is invalid.
         """
-        # Reject invalid input before any state change or broadcast (Req 7.1).
-        trimmed_title = self._require_non_empty(title, "Item title")
+        trimmed_title = _require_text(title, "Item title", TITLE_MAX)
+        trimmed_added_by = _require_text(added_by, "Your name", ADDED_BY_MAX)
+        trimmed_employee_id = _require_text(
+            employee_id, "Employee ID", EMPLOYEE_ID_MAX
+        )
+        trimmed_date = _require_date(bring_date, "Date")
+        if image_url is not None and not isinstance(image_url, str):
+            raise ValidationError("Image link must be text.")
 
         # Lazily create the board if missing.
         if self._store.get_board(board_id) is None:
@@ -113,6 +181,9 @@ class PotluckService:
             image_url=image_url,
             claimed_by=None,
             created_at=time.time(),
+            added_by=trimmed_added_by,
+            employee_id=trimmed_employee_id,
+            bring_date=trimmed_date,
         )
         self._store.save_item(board_id, item)
 
@@ -251,6 +322,51 @@ class PotluckService:
         # Exactly one event on success, after releasing the lock (Req 2.3).
         await self._hub.broadcast(
             board_id, ChangeEvent(ChangeType.ITEM_UNCLAIMED, board_id, item)
+        )
+        return item
+
+    async def delete_item(
+        self, board_id: str, item_id: str, employee_id: Any
+    ) -> Item:
+        """Delete an Available item after an ownership check.
+
+        Checks run inside the per-item lock in this exact order:
+
+        1. missing item -> :class:`NotFoundError`
+        2. stored employee id set and submitted id missing/mismatched ->
+           :class:`PermissionError` with one constant generic message
+        3. item claimed -> :class:`ConflictError` (bringer must release first)
+        4. ``store.delete_item`` (``NotFoundError`` if it removed nothing)
+
+        Legacy items (stored ``employee_id`` is ``None``) skip step 2. Exactly
+        one ``ItemDeleted`` is broadcast after the lock is released; nothing is
+        broadcast on failure. The stored id is used for no other purpose.
+        """
+        with self._store.item_lock(board_id, item_id):
+            item = self._store.get_item(board_id, item_id)
+            if item is None:
+                raise NotFoundError(
+                    f"Item {item_id!r} not found on board {board_id!r}."
+                )
+            if item.employee_id is not None and not _ids_match(
+                item.employee_id, employee_id
+            ):
+                raise PermissionError(DELETE_FORBIDDEN_MESSAGE)
+            if item.claimed_by is not None:
+                raise ConflictError(
+                    current_claimer=item.claimed_by,
+                    message=(
+                        "This item has already been claimed; the bringer must "
+                        "release it first."
+                    ),
+                )
+            if not self._store.delete_item(board_id, item_id):
+                raise NotFoundError(
+                    f"Item {item_id!r} not found on board {board_id!r}."
+                )
+
+        await self._hub.broadcast(
+            board_id, ChangeEvent(ChangeType.ITEM_DELETED, board_id, item)
         )
         return item
 

@@ -126,7 +126,7 @@
 
       <!-- Items panel: status board + add form -->
       <section class="tab-panel" id="panel-items" role="tabpanel" aria-labelledby="tab-items">
-        <p class="board-summary" id="items-summary" aria-live="polite"></p>
+        <p class="board-summary" id="items-summary" aria-live="polite" tabindex="-1"></p>
         <p class="form-error" id="items-error" role="alert"></p>
         <p class="empty-state" id="items-empty" hidden>No items yet. Add the first dish!</p>
         <ul class="items" id="items-list"></ul>
@@ -134,21 +134,43 @@
         <h2 class="section-title" id="add-heading">Add a dish</h2>
         <form class="form" id="add-form" novalidate aria-labelledby="add-heading">
           <div class="field">
-            <label for="item-title">Food item</label>
-            <input type="text" id="item-title" name="title" required maxlength="80"
-                   placeholder="e.g. Chicken / Veg Biryani" autocomplete="off">
+            <label for="add-name">Your name</label>
+            <input type="text" id="add-name" name="added_by" required maxlength="60"
+                   placeholder="e.g. Ravi" autocomplete="name" aria-describedby="add-name-error">
+            <p class="form-error" id="add-name-error" role="alert"></p>
           </div>
-          <div class="suggestions" role="group" aria-label="Quick suggestions">
+          <div class="field">
+            <label for="add-employee-id">Employee ID</label>
+            <input type="text" id="add-employee-id" name="employee_id" required maxlength="30"
+                   autocomplete="off" aria-describedby="add-employee-id-error">
+            <p class="form-error" id="add-employee-id-error" role="alert"></p>
+          </div>
+          <div class="field">
+            <label for="item-title">Food item</label>
+            <input type="text" id="item-title" name="title" required maxlength="100"
+                   placeholder="e.g. Chicken / Veg Biryani" autocomplete="off"
+                   aria-describedby="item-title-error">
+            <p class="form-error" id="item-title-error" role="alert"></p>
+          </div>
+          <div class="field">
+            <label for="item-date">Date</label>
+            <input type="date" id="item-date" name="bring_date" required value="2026-10-12"
+                   aria-describedby="item-date-error">
+            <p class="form-error" id="item-date-error" role="alert"></p>
+          </div>
+          <div class="field">
+            <label for="item-image">Image link (optional)</label>
+            <input type="url" id="item-image" name="image_url" placeholder="https://..." autocomplete="off"
+                   aria-describedby="item-image-error">
+            <p class="form-error" id="item-image-error" role="alert"></p>
+          </div>
+          <div class="suggestions" role="group" aria-label="Quick suggestions for the food item">
             <button type="button" class="btn btn-small btn-secondary" data-suggest="Biryani">Biryani</button>
             <button type="button" class="btn btn-small btn-secondary" data-suggest="Snacks">Snacks</button>
             <button type="button" class="btn btn-small btn-secondary" data-suggest="Sweets">Sweets</button>
             <button type="button" class="btn btn-small btn-secondary" data-suggest="Drinks">Drinks</button>
             <button type="button" class="btn btn-small btn-secondary" data-suggest="Salad">Salad</button>
             <button type="button" class="btn btn-small btn-secondary" data-suggest="Raita">Raita</button>
-          </div>
-          <div class="field">
-            <label for="item-image">Image link (optional)</label>
-            <input type="url" id="item-image" name="image_url" placeholder="https://..." autocomplete="off">
           </div>
           <p class="form-error" id="add-error" role="alert"></p>
           <button type="submit" class="btn btn-primary" id="add-submit">Add item</button>

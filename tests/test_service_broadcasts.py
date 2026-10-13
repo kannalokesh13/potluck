@@ -27,6 +27,11 @@ def run(coro):
     return asyncio.run(coro)
 
 
+def new_item(service, title="Dish"):
+    """Coroutine adding a valid item (employee E1, Asha, 2026-10-12)."""
+    return service.add_item(B, title, "Asha", "E1", "2026-10-12")
+
+
 def _fresh():
     service, store, hub = make_service()
     return service, store, hub
@@ -38,7 +43,7 @@ def test_exactly_one_event_per_successful_mutation():
     hub.subscribe(B, conn)
 
     async def scenario():
-        item = await service.add_item(B, "Biryani")
+        item = await new_item(service, "Biryani")
         assert [e.type for _, e in hub.events] == [ChangeType.ITEM_ADDED]
         await service.claim_item(B, item.id, "Ravi")
         assert [e.type for _, e in hub.events] == [
@@ -64,12 +69,12 @@ def test_no_event_after_failures():
     service, _store, hub = _fresh()
 
     async def scenario():
-        item = await service.add_item(B, "Biryani")
+        item = await new_item(service, "Biryani")
         await service.claim_item(B, item.id, "Ravi")
         baseline = len(hub.events)
 
         with pytest.raises(ValidationError):
-            await service.add_item(B, "   ")
+            await new_item(service, "   ")
         with pytest.raises(ValidationError):
             await service.claim_item(B, item.id, "  ")
         with pytest.raises(ValidationError):
@@ -101,9 +106,9 @@ def test_event_count_equals_successful_mutations(steps):
         for step in steps:
             try:
                 if step == "add":
-                    item_id = (await service.add_item(B, "Dish")).id
+                    item_id = (await new_item(service)).id
                 elif step == "bad":
-                    await service.add_item(B, " ")
+                    await new_item(service, " ")
                 elif item_id is None:
                     continue
                 elif step == "claim":
@@ -127,14 +132,14 @@ def test_whitespace_title_rejected_and_nothing_stored():
     service, store, hub = _fresh()
     for bad in ["", "   ", "\t\n "]:
         with pytest.raises(ValidationError):
-            run(service.add_item(B, bad))
+            run(new_item(service, bad))
     assert store.list_items(B) == []
     assert hub.events == []
 
 
 def test_whitespace_name_rejected_for_claim_and_unclaim():
     service, store, hub = _fresh()
-    item = run(service.add_item(B, "Biryani"))
+    item = run(new_item(service, "Biryani"))
     for bad in ["", "  ", "\t"]:
         with pytest.raises(ValidationError):
             run(service.claim_item(B, item.id, bad))
@@ -146,7 +151,7 @@ def test_whitespace_name_rejected_for_claim_and_unclaim():
 
 def test_trimmed_values_are_stored():
     service, store, _hub = _fresh()
-    item = run(service.add_item(B, "  Biryani  "))
+    item = run(new_item(service, "  Biryani  "))
     assert item.title == "Biryani"
     assert store.get_item(B, item.id).title == "Biryani"
 

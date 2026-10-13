@@ -30,7 +30,8 @@ export function derivePeople(items) {
 /**
  * Apply a change event to an items list, returning a NEW array.
  * ItemAdded appends if the id is unseen; ItemClaimed/ItemUnclaimed replace the
- * item with the same id (appending if missing). Input is never mutated.
+ * item with the same id (appending if missing). ItemDeleted removes the item
+ * by id (no-op when absent). Input is never mutated.
  * @param {Array<{id: string}>} items
  * @param {{type: string, item: {id: string}}} event
  * @returns {Array}
@@ -47,6 +48,9 @@ export function applyEvent(items, event) {
     case "ItemUnclaimed":
       if (idx === -1) next.push(event.item);
       else next[idx] = event.item;
+      break;
+    case "ItemDeleted":
+      if (idx !== -1) next.splice(idx, 1);
       break;
     default:
       break;

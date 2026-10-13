@@ -59,7 +59,21 @@ _SCHEMA_STATEMENTS = (
     """,
 )
 
-_ITEM_COLUMNS = "id, board_id, title, image_url, claimed_by, created_at"
+# Additive, idempotent migration for the adder/employee/date enhancement.
+# Existing rows get NULL (legacy items); no data is rewritten.
+_MIGRATION_STATEMENTS = (
+    "ALTER TABLE potluck_items ADD COLUMN IF NOT EXISTS added_by text",
+    "ALTER TABLE potluck_items ADD COLUMN IF NOT EXISTS employee_id text",
+    "ALTER TABLE potluck_items ADD COLUMN IF NOT EXISTS bring_date text",
+)
+
+# Serializes concurrent schema setup across instances (arbitrary constant).
+_SCHEMA_LOCK_KEY = 7_262_026_001
+
+_ITEM_COLUMNS = (
+    "id, board_id, title, image_url, claimed_by, created_at, "
+    "added_by, employee_id, bring_date"
+)
 
 
 def _row_to_item(row: tuple[Any, ...]) -> Item:
@@ -70,6 +84,9 @@ def _row_to_item(row: tuple[Any, ...]) -> Item:
         image_url=row[3],
         claimed_by=row[4],
         created_at=float(row[5]),
+        added_by=row[6],
+        employee_id=row[7],
+        bring_date=row[8],
     )
 
 
@@ -101,7 +118,16 @@ class PostgresBoardStore:
         self._item_locks: dict[tuple[str, str], threading.RLock] = {}
         self._item_locks_guard = threading.Lock()
 
-        self.ensure_schema()
+        try:
+            self.ensure_schema()
+        except BaseException:
+            # Release pool resources, then propagate the original error as-is
+            # (no wrapping, so the connection string is never echoed).
+            try:
+                self.close()
+            except Exception:
+                pass
+            raise
 
     # ------------------------------------------------------------------
     # Pool / schema management
@@ -116,9 +142,19 @@ class PostgresBoardStore:
         return self._pool.connection()
 
     def ensure_schema(self) -> None:
-        """Create tables and index if they do not exist (idempotent)."""
+        """Create tables, index and new columns (idempotent, one transaction).
+
+        The pooled-connection context commits on success and rolls back on any
+        exception, so a failed migration leaves no partial columns. The lock
+        timeout and transaction-level advisory lock keep concurrent starts from
+        racing or hanging; both are released at commit/rollback.
+        """
         with self._connection() as conn:
+            conn.execute("SET LOCAL lock_timeout = '10s'")
+            conn.execute("SELECT pg_advisory_xact_lock(%s)", (_SCHEMA_LOCK_KEY,))
             for statement in _SCHEMA_STATEMENTS:
+                conn.execute(statement)
+            for statement in _MIGRATION_STATEMENTS:
                 conn.execute(statement)
 
     def close(self) -> None:
@@ -168,8 +204,9 @@ class PostgresBoardStore:
             )
             conn.execute(
                 "INSERT INTO potluck_items "
-                "(board_id, id, title, image_url, claimed_by, created_at) "
-                "VALUES (%s, %s, %s, %s, %s, %s) "
+                "(board_id, id, title, image_url, claimed_by, created_at, "
+                "added_by, employee_id, bring_date) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) "
                 "ON CONFLICT (board_id, id) DO UPDATE SET "
                 "title = EXCLUDED.title, "
                 "image_url = EXCLUDED.image_url, "
@@ -181,6 +218,9 @@ class PostgresBoardStore:
                     item.image_url,
                     item.claimed_by,
                     item.created_at,
+                    item.added_by,
+                    item.employee_id,
+                    item.bring_date,
                 ),
             )
 
@@ -201,6 +241,18 @@ class PostgresBoardStore:
                 (board_id,),
             ).fetchall()
         return [_row_to_item(row) for row in rows]
+
+    def delete_item(self, board_id: str, item_id: str) -> bool:
+        """Delete one item; True if a row was removed.
+
+        The per-item lock entry is intentionally kept (see InMemoryBoardStore).
+        """
+        with self._connection() as conn:
+            cur = conn.execute(
+                "DELETE FROM potluck_items WHERE board_id = %s AND id = %s",
+                (board_id, item_id),
+            )
+            return cur.rowcount > 0
 
     # ------------------------------------------------------------------
     # Concurrency helper

@@ -31,6 +31,8 @@ class BoardStore(Protocol):
 
     def list_items(self, board_id: str) -> list[Item]: ...
 
+    def delete_item(self, board_id: str, item_id: str) -> bool: ...
+
 
 def generate_board_id() -> str:
     """Return an unguessable, URL-safe board id.
@@ -127,6 +129,19 @@ class InMemoryBoardStore:
             if not bucket:
                 return []
             return list(bucket.values())
+
+    def delete_item(self, board_id: str, item_id: str) -> bool:
+        """Remove one item; return True if it existed.
+
+        Other items keep their relative order and other boards are untouched.
+        The per-item lock entry is deliberately kept: a waiting claimer may
+        still hold that lock object, and replacing it would break exclusivity.
+        """
+        with self._lock:
+            bucket = self._items.get(board_id)
+            if bucket is None:
+                return False
+            return bucket.pop(item_id, None) is not None
 
     # ------------------------------------------------------------------
     # Concurrency helper

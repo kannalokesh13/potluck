@@ -77,7 +77,7 @@ def run_ops(sequence: list[tuple], check: Callable[[Step], None]) -> None:
         error = None
 
         if op[0] == "add":
-            coro = service.add_item(BOARD, op[1])
+            coro = service.add_item(BOARD, op[1], "Asha", "E1", "2026-10-12")
         else:
             if not before:
                 continue  # nothing to claim/unclaim yet

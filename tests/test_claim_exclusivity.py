@@ -9,7 +9,7 @@ import asyncio
 import threading
 
 from app.exceptions import ConflictError
-from tests.conftest import make_service
+from tests.conftest import add, make_service
 
 B = "b1"
 ROUNDS = 10
@@ -18,7 +18,7 @@ N = 20
 
 def _setup():
     service, store, hub = make_service()
-    item = asyncio.run(service.add_item(B, "Biryani"))
+    item = add(service, B, "Biryani")
     return service, store, hub, item
 
 

@@ -100,7 +100,7 @@ function storeName(value) {
   }
 }
 
-/** Turn any thrown value into a friendly message. */
+/** Turn any thrown value into a friendly message (claim/unclaim/add). */
 function errorMessage(err) {
   if (err instanceof ApiError) {
     if (err.status === 409 && err.currentClaimer) {
@@ -110,6 +110,59 @@ function errorMessage(err) {
   }
   return "Something went wrong. Please try again.";
 }
+
+/** Friendly message for a failed delete (never uses the "Already taken by" wording). */
+function deleteErrorMessage(err) {
+  if (err instanceof ApiError) {
+    if (err.status === 403) return "That employee ID doesn't match this item.";
+    if (err.status === 404) return "This item no longer exists.";
+    // 409 carries the server's "the bringer must release it first" text; the
+    // timeout (status 0) and network messages are already user friendly.
+    return err.message;
+  }
+  return "Something went wrong. Please try again.";
+}
+
+function hasText(value) {
+  return typeof value === "string" && value.trim() !== "";
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * Format a stored "YYYY-MM-DD" as "D Mon YYYY" by manual parsing (never
+ * `new Date(...)`, so the viewer's time zone cannot shift the day).
+ * @param {unknown} iso
+ * @returns {string|null} null when missing or invalid.
+ */
+export function formatBringDate(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(typeof iso === "string" ? iso : "");
+  if (!m) return null;
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return `${day} ${MONTHS[month - 1]} ${m[1]}`;
+}
+
+/** Strict calendar check for "YYYY-MM-DD" (no Date object, no time zones). */
+function isValidIsoDate(value) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(typeof value === "string" ? value : "");
+  if (!m) return false;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  if (year < 1 || month < 1 || month > 12 || day < 1) return false;
+  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1];
+  return day <= days;
+}
+
+/** Length in characters (code points), matching how the server counts. */
+function charLength(value) {
+  return Array.from(String(value)).length;
+}
+
+const LIMITS = { name: 60, employeeId: 30, title: 100 };
 
 /* ---------------------------------------------------------------------------
  * Main
@@ -127,7 +180,10 @@ function init(id) {
   const itemsEmpty = $("items-empty");
   const itemsList = $("items-list");
   const addForm = $("add-form");
+  const addNameInput = $("add-name");
+  const employeeInput = $("add-employee-id");
   const titleInput = $("item-title");
+  const dateInput = $("item-date");
   const imageInput = $("item-image");
   const addError = $("add-error");
   const addSubmit = $("add-submit");
@@ -151,6 +207,14 @@ function init(id) {
   const badImages = new Set();
   /** Focus to restore after a render when focus was lost to a disabled button. */
   let restoreFocus = null;
+  /**
+   * Open delete confirmation, or null. Kept here (not in the DOM) because every
+   * realtime event rebuilds the cards. The typed id lives only in this variable
+   * and the input; it is never persisted.
+   * @type {{itemId: string, value: string, error: string, busy: boolean}|null}
+   */
+  let deletePanel = null;
+  let deleteDoneTimer = null;
   let toastTimer = null;
   let itemsErrorTimer = null;
 
@@ -215,6 +279,10 @@ function init(id) {
       btn.classList.add("btn-primary");
       btn.textContent = "I'll bring this";
       btn.setAttribute("aria-label", `I'll bring this: ${item.title}`);
+    } else if (action === "delete") {
+      btn.classList.add("btn-danger-ghost");
+      btn.textContent = "Delete";
+      btn.setAttribute("aria-label", `Delete ${item.title}`);
     } else {
       btn.classList.add("btn-danger-ghost");
       btn.textContent = "I can't bring it";
@@ -222,6 +290,102 @@ function init(id) {
     }
     if (pending.has(`${item.id}:${action}`)) btn.disabled = true;
     return btn;
+  }
+
+  /** "Added by", "Employee ID" and date parts; missing parts are omitted entirely. */
+  function renderMeta(item) {
+    const parts = [];
+    const labelled = (label, value) => {
+      const span = el("span", "meta-part");
+      span.appendChild(el("span", "meta-label", label));
+      span.appendChild(document.createTextNode(" "));
+      span.appendChild(el("span", "meta-value", String(value).trim()));
+      return span;
+    };
+    if (hasText(item.added_by)) parts.push(labelled("Added by", item.added_by));
+    if (hasText(item.employee_id)) parts.push(labelled("Employee ID", item.employee_id));
+    const dateText = formatBringDate(item.bring_date);
+    if (dateText) {
+      const time = el("time", "meta-date", dateText);
+      time.setAttribute("datetime", item.bring_date);
+      parts.push(time);
+    }
+    if (parts.length === 0) return null;
+
+    const p = el("p", "item-meta");
+    parts.forEach((part, index) => {
+      if (index > 0) {
+        const sep = el("span", "meta-sep", "\u00B7");
+        sep.setAttribute("aria-hidden", "true");
+        p.appendChild(sep);
+      }
+      p.appendChild(part);
+    });
+    return p;
+  }
+
+  function isLegacyItem(item) {
+    return !hasText(item.added_by) && !hasText(item.bring_date);
+  }
+
+  /** Inline delete confirmation (a <form>, so Enter confirms). */
+  function renderDeletePanel(item, panel) {
+    const form = el("form", "delete-confirm");
+    form.noValidate = true;
+    form.dataset.itemId = item.id;
+    const promptId = `delete-prompt-${item.id}`;
+    const inputId = `delete-eid-${item.id}`;
+    const hintId = `delete-hint-${item.id}`;
+    const errorId = `delete-error-${item.id}`;
+    form.setAttribute("aria-labelledby", promptId);
+
+    const prompt = el("p", "delete-prompt", `Delete "${String(item.title)}"?`);
+    prompt.id = promptId;
+    form.appendChild(prompt);
+
+    const field = el("div", "field");
+    const label = el("label", null, "Employee ID");
+    label.htmlFor = inputId;
+    field.appendChild(label);
+
+    const input = el("input");
+    input.type = "text";
+    input.id = inputId;
+    input.maxLength = LIMITS.employeeId;
+    input.autocomplete = "off";
+    input.value = panel.value;
+    input.readOnly = panel.busy;
+    input.dataset.action = "delete-input";
+    input.dataset.itemId = item.id;
+    input.setAttribute("aria-describedby", `${hintId} ${errorId}`);
+    field.appendChild(input);
+
+    let hint = "Type the employee ID of the person who added this item.";
+    if (isLegacyItem(item)) {
+      hint += " This item was added before employee IDs were introduced, so you may leave it empty.";
+    }
+    const hintEl = el("p", "panel-note", hint);
+    hintEl.id = hintId;
+    field.appendChild(hintEl);
+    form.appendChild(field);
+
+    const error = el("p", "form-error", panel.error);
+    error.id = errorId;
+    error.setAttribute("role", "alert");
+    form.appendChild(error);
+
+    const actions = el("div", "delete-actions");
+    const confirm = el("button", "btn btn-small btn-danger", panel.busy ? "Deleting..." : "Confirm delete");
+    confirm.type = "submit";
+    confirm.disabled = panel.busy;
+    const cancel = el("button", "btn btn-small btn-secondary", "Cancel");
+    cancel.type = "button";
+    cancel.dataset.action = "cancel-delete";
+    cancel.dataset.itemId = item.id;
+    cancel.disabled = panel.busy;
+    actions.append(confirm, cancel);
+    form.appendChild(actions);
+    return form;
   }
 
   function renderItemCard(item, me) {
@@ -233,6 +397,8 @@ function init(id) {
 
     const body = el("div", "item-body");
     body.appendChild(el("p", "item-title", item.title));
+    const meta = renderMeta(item);
+    if (meta) body.appendChild(meta);
     body.appendChild(
       el("p", "item-bringing", `Bringing: ${taken ? String(item.claimed_by).trim() : "Not assigned"}`)
     );
@@ -240,24 +406,27 @@ function init(id) {
       el("span", `badge ${taken ? "taken" : "available"}`, taken ? "Already Taken" : "Available")
     );
 
+    const panelOpen = !taken && deletePanel !== null && deletePanel.itemId === item.id;
     const actions = el("div", "item-actions");
     if (!taken) {
       actions.appendChild(actionButton(item, "claim"));
+      if (!panelOpen) actions.appendChild(actionButton(item, "delete"));
     } else if (me && normName(item.claimed_by) === me) {
       actions.appendChild(actionButton(item, "unclaim"));
     }
     if (actions.childElementCount > 0) body.appendChild(actions);
+    if (panelOpen) body.appendChild(renderDeletePanel(item, deletePanel));
 
     li.appendChild(body);
     return li;
   }
 
-  /** Find the button matching a remembered focus target (exact, then same item). */
+  /** Find the control matching a remembered focus target (exact, then same item). */
   function findFocusTarget(target) {
-    const buttons = Array.from(itemsList.querySelectorAll("button[data-action]"));
+    const controls = Array.from(itemsList.querySelectorAll("[data-action]"));
     return (
-      buttons.find((b) => b.dataset.itemId === target.itemId && b.dataset.action === target.action) ||
-      buttons.find((b) => b.dataset.itemId === target.itemId) ||
+      controls.find((b) => b.dataset.itemId === target.itemId && b.dataset.action === target.action) ||
+      controls.find((b) => b.dataset.itemId === target.itemId && !b.disabled) ||
       null
     );
   }
@@ -265,10 +434,13 @@ function init(id) {
   function renderItems() {
     const active = document.activeElement;
     let focusTarget = null;
-    if (active && itemsList.contains(active) && active.dataset && active.dataset.itemId) {
-      focusTarget = { itemId: active.dataset.itemId, action: active.dataset.action };
-    } else if (restoreFocus) {
+    if (restoreFocus) {
       focusTarget = restoreFocus;
+    } else if (active && itemsList.contains(active) && active.dataset && active.dataset.itemId) {
+      focusTarget = { itemId: active.dataset.itemId, action: active.dataset.action };
+      if (typeof active.selectionStart === "number") {
+        focusTarget.selection = [active.selectionStart, active.selectionEnd];
+      }
     }
     restoreFocus = null;
 
@@ -278,7 +450,16 @@ function init(id) {
 
     if (focusTarget) {
       const next = findFocusTarget(focusTarget);
-      if (next) next.focus();
+      if (next) {
+        next.focus();
+        if (focusTarget.selection && next.dataset.action === "delete-input") {
+          try {
+            next.setSelectionRange(focusTarget.selection[0], focusTarget.selection[1]);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
     }
   }
 
@@ -323,9 +504,39 @@ function init(id) {
     renderPeople();
   }
 
+  function panelHasFocus() {
+    const active = document.activeElement;
+    return Boolean(active && itemsList.contains(active) && active.closest(".delete-confirm"));
+  }
+
+  /**
+   * Drop the delete panel if its item vanished or was claimed.
+   * @returns {boolean} true when focus should move to the items summary.
+   */
+  function dropStalePanel() {
+    if (!deletePanel) return false;
+    const item = items.find((i) => i.id === deletePanel.itemId);
+    const hadFocus = panelHasFocus();
+    if (!item) {
+      // A busy panel means our own delete is in flight: the removal is expected.
+      const expected = deletePanel.busy;
+      deletePanel = null;
+      if (!expected) showToast("That item was removed, so the delete form was closed.");
+      return hadFocus;
+    }
+    if (isTaken(item) && !deletePanel.busy) {
+      deletePanel = null;
+      showToast("That item was just taken, so it can no longer be deleted.");
+      if (hadFocus) restoreFocus = { itemId: item.id, action: "unclaim" };
+    }
+    return false;
+  }
+
   function onState(nextItems) {
     items = Array.isArray(nextItems) ? nextItems : [];
+    const focusSummary = dropStalePanel();
     renderAll();
+    if (focusSummary) itemsSummary.focus();
   }
 
   /* ---- Claim / unclaim --------------------------------------------------- */
@@ -371,6 +582,78 @@ function init(id) {
     runItemAction(btn, item, "unclaim", () => api.unclaimItem(item.id, name), "Item is available again.");
   }
 
+  /* ---- Delete with inline confirmation ---------------------------------- */
+
+  function openDeletePanel(item) {
+    if (deletePanel && deletePanel.busy) return; // one request at a time
+    clearTimeout(deleteDoneTimer);
+    deletePanel = { itemId: item.id, value: "", error: "", busy: false };
+    restoreFocus = { itemId: item.id, action: "delete-input" };
+    renderItems();
+  }
+
+  function closeDeletePanel() {
+    if (!deletePanel || deletePanel.busy) return;
+    const itemId = deletePanel.itemId;
+    deletePanel = null;
+    restoreFocus = { itemId, action: "delete" };
+    renderItems();
+  }
+
+  async function submitDelete(form) {
+    const panel = deletePanel;
+    if (!panel || panel.busy || panel.itemId !== form.dataset.itemId) return;
+    const item = items.find((i) => i.id === panel.itemId);
+    if (!item || isTaken(item)) return;
+
+    const input = form.querySelector("input[data-action='delete-input']");
+    if (input) panel.value = input.value;
+    const employeeId = panel.value.trim();
+
+    if (!employeeId && !isLegacyItem(item)) {
+      panel.error = "Please enter the employee ID.";
+      restoreFocus = { itemId: panel.itemId, action: "delete-input" };
+      renderItems();
+      return;
+    }
+
+    panel.error = "";
+    panel.busy = true;
+    // Keep focus on the input (not the soon-disabled Confirm button).
+    restoreFocus = { itemId: panel.itemId, action: "delete-input" };
+    renderItems();
+
+    const itemId = panel.itemId;
+    try {
+      await api.deleteItem(itemId, employeeId);
+    } catch (err) {
+      const message = deleteErrorMessage(err);
+      if (deletePanel && deletePanel.itemId === itemId) {
+        deletePanel.busy = false;
+        deletePanel.error = message;
+        restoreFocus = { itemId, action: "delete-input" };
+        renderItems();
+      } else {
+        showToast(message);
+      }
+      return;
+    }
+
+    showToast("Item deleted");
+    if (deletePanel && deletePanel.itemId === itemId) {
+      // The ItemDeleted event hasn't removed the card yet. The panel stays busy
+      // (so no second request can go out) until the event or a reconnect
+      // snapshot arrives; if that takes too long, hand control back.
+      deleteDoneTimer = setTimeout(() => {
+        if (deletePanel && deletePanel.itemId === itemId) {
+          deletePanel = null;
+          restoreFocus = { itemId, action: "delete" };
+          renderItems();
+        }
+      }, 5000);
+    }
+  }
+
   itemsList.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
@@ -378,25 +661,131 @@ function init(id) {
     if (!btn || !itemsList.contains(btn) || btn.disabled) return;
     const item = items.find((i) => i.id === btn.dataset.itemId);
     if (!item) return;
-    if (btn.dataset.action === "claim") handleClaim(btn, item);
-    else if (btn.dataset.action === "unclaim") handleUnclaim(btn, item);
+    switch (btn.dataset.action) {
+      case "claim":
+        handleClaim(btn, item);
+        break;
+      case "unclaim":
+        handleUnclaim(btn, item);
+        break;
+      case "delete":
+        openDeletePanel(item);
+        break;
+      case "cancel-delete":
+        closeDeletePanel();
+        break;
+      default:
+        break;
+    }
+  });
+
+  itemsList.addEventListener("submit", (event) => {
+    const form = event.target;
+    if (!(form instanceof Element) || !form.matches("form.delete-confirm")) return;
+    event.preventDefault();
+    submitDelete(form);
+  });
+
+  itemsList.addEventListener("input", (event) => {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement) || input.dataset.action !== "delete-input") return;
+    if (!deletePanel || deletePanel.itemId !== input.dataset.itemId || deletePanel.busy) return;
+    deletePanel.value = input.value;
+    if (deletePanel.error) {
+      deletePanel.error = "";
+      const errorEl = input.closest("form") && input.closest("form").querySelector(".form-error");
+      if (errorEl) errorEl.textContent = "";
+    }
+  });
+
+  itemsList.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || !deletePanel) return;
+    const target = event.target;
+    if (!(target instanceof Element) || !target.closest(".delete-confirm")) return;
+    event.preventDefault();
+    closeDeletePanel();
   });
 
   /* ---- Name -------------------------------------------------------------- */
 
   nameInput.value = readStoredName();
+  // The add-form name starts from the saved claim name and follows it only
+  // until the user edits the add-form name themselves.
+  let addNameDirty = false;
+  addNameInput.value = nameInput.value;
   nameInput.addEventListener("input", () => {
     storeName(nameInput.value.trim());
     nameError.textContent = "";
+    if (!addNameDirty) addNameInput.value = nameInput.value;
     renderItems();
   });
   nameForm.addEventListener("submit", (event) => event.preventDefault());
 
   /* ---- Add item ---------------------------------------------------------- */
 
+  const addFields = [addNameInput, employeeInput, titleInput, dateInput, imageInput];
+
+  function fieldErrorEl(input) {
+    return $(`${input.id}-error`);
+  }
+
+  function setFieldError(input, message) {
+    fieldErrorEl(input).textContent = message || "";
+    if (message) input.setAttribute("aria-invalid", "true");
+    else input.removeAttribute("aria-invalid");
+  }
+
+  function clearAddErrors() {
+    for (const input of addFields) setFieldError(input, "");
+    addError.textContent = "";
+  }
+
+  /** Client-side checks mirroring the server. Returns the first invalid input or null. */
+  function validateAddForm(values) {
+    const problems = new Map();
+    if (!values.added_by) problems.set(addNameInput, "Please enter your name");
+    else if (charLength(values.added_by) > LIMITS.name) {
+      problems.set(addNameInput, `Name must be ${LIMITS.name} characters or fewer`);
+    }
+    if (!values.employee_id) problems.set(employeeInput, "Please enter your employee ID");
+    else if (charLength(values.employee_id) > LIMITS.employeeId) {
+      problems.set(employeeInput, `Employee ID must be ${LIMITS.employeeId} characters or fewer`);
+    }
+    if (!values.title) problems.set(titleInput, "Please enter a food item");
+    else if (charLength(values.title) > LIMITS.title) {
+      problems.set(titleInput, `Food item must be ${LIMITS.title} characters or fewer`);
+    }
+    if (!values.bring_date) problems.set(dateInput, "Please choose a date");
+    else if (!isValidIsoDate(values.bring_date)) {
+      problems.set(dateInput, "Enter a valid date as YYYY-MM-DD");
+    }
+    if (values.image_url && !safeImageUrl(values.image_url)) {
+      problems.set(imageInput, "Image link must start with http:// or https://");
+    }
+
+    let first = null;
+    for (const input of addFields) {
+      const message = problems.get(input) || "";
+      setFieldError(input, message);
+      if (message && !first) first = input;
+    }
+    return first;
+  }
+
+  addNameInput.addEventListener("input", () => {
+    addNameDirty = true;
+  });
+
+  addForm.addEventListener("input", (event) => {
+    const input = event.target;
+    if (addFields.includes(input)) setFieldError(input, "");
+    addError.textContent = "";
+  });
+
   for (const btn of document.querySelectorAll("button[data-suggest]")) {
     btn.addEventListener("click", () => {
       titleInput.value = btn.dataset.suggest || "";
+      setFieldError(titleInput, "");
       addError.textContent = "";
       titleInput.focus();
     });
@@ -406,28 +795,33 @@ function init(id) {
     event.preventDefault();
     if (addSubmit.disabled) return;
 
-    const title = titleInput.value.trim();
-    const image = imageInput.value.trim();
-
-    if (!title) {
-      addError.textContent = "Please enter a food item";
-      titleInput.focus();
-      return;
-    }
-    if (image && !safeImageUrl(image)) {
-      addError.textContent = "Image link must start with http:// or https://";
-      imageInput.focus();
-      return;
-    }
+    const values = {
+      added_by: addNameInput.value.trim(),
+      employee_id: employeeInput.value.trim(),
+      title: titleInput.value.trim(),
+      bring_date: dateInput.value.trim(),
+      image_url: imageInput.value.trim(),
+    };
 
     addError.textContent = "";
+    const firstInvalid = validateAddForm(values);
+    if (firstInvalid) {
+      firstInvalid.focus();
+      return;
+    }
+
     addSubmit.disabled = true;
     try {
-      await api.addItem(title, image || null);
-      addForm.reset();
+      await api.addItem({ ...values, image_url: values.image_url || null });
+      // Clear only title, image and employee id; keep the name and the date.
+      titleInput.value = "";
+      imageInput.value = "";
+      employeeInput.value = "";
+      clearAddErrors();
       showToast("Item added");
       titleInput.focus();
     } catch (err) {
+      // Keep every entered value and add no card.
       addError.textContent = errorMessage(err);
     } finally {
       addSubmit.disabled = false;

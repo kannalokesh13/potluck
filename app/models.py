@@ -33,6 +33,10 @@ class Item:
         image_url: Optional food image reference, or None.
         claimed_by: Participant display name holding the item, or None.
         created_at: Creation time in epoch seconds.
+        added_by: Public name of the adder; None on legacy items.
+        employee_id: Public employee id shown on the card and used to authorize
+            delete (``repr=False`` keeps it out of reprs); None on legacy items.
+        bring_date: Public ISO ``YYYY-MM-DD`` string; None on legacy items.
     """
 
     id: str
@@ -41,6 +45,9 @@ class Item:
     image_url: str | None
     claimed_by: str | None
     created_at: float
+    added_by: str | None = None
+    employee_id: str | None = field(default=None, repr=False)
+    bring_date: str | None = None
 
     @property
     def status(self) -> ItemStatus:
@@ -85,6 +92,7 @@ class ChangeType(str, Enum):
     ITEM_ADDED = "ItemAdded"
     ITEM_CLAIMED = "ItemClaimed"
     ITEM_UNCLAIMED = "ItemUnclaimed"
+    ITEM_DELETED = "ItemDeleted"
 
 
 @dataclass

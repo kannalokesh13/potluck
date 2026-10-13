@@ -10,6 +10,7 @@ from app.api import create_router, register_exception_handlers
 from app.hub import WebSocketHub
 from app.service import PotluckService
 from app.store import InMemoryBoardStore
+from tests.conftest import VALID_BODY
 
 B = "board-x"
 
@@ -32,7 +33,8 @@ def client():
 
 
 def add(client, title="Biryani", **extra):
-    return client.post(f"/board/{B}/items", json={"title": title, **extra})
+    body = {**VALID_BODY, "title": title, **extra}
+    return client.post(f"/board/{B}/items", json=body)
 
 
 # ---------------------------------------------------------------- add item
@@ -42,7 +44,11 @@ def test_add_item_201_shape(client):
     body = r.json()
     assert set(body) == {
         "id", "board_id", "title", "image_url", "claimed_by", "created_at", "status",
+        "added_by", "employee_id", "bring_date",
     }
+    assert body["added_by"] == "Asha"
+    assert body["employee_id"] == "E1"
+    assert body["bring_date"] == "2026-10-12"
     assert body["title"] == "Biryani"
     assert body["board_id"] == B
     assert body["image_url"] == "http://img/x.png"

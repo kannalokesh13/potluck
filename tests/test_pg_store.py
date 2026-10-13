@@ -145,7 +145,7 @@ def test_claim_flow_through_service(store, board_ids):
     b = board_ids()
     service = PotluckService(store, WebSocketHub())
 
-    item = asyncio.run(service.add_item(b, "  Biryani  ", None))
+    item = asyncio.run(service.add_item(b, "  Biryani  ", "Asha", "E1", "2026-10-12", None))
     assert item.title == "Biryani"
     assert [i.id for i in service.get_board_state(b).items] == [item.id]
 
@@ -170,7 +170,7 @@ def test_data_persists_across_new_store_instance(store, board_ids):
 
     b = board_ids()
     service = PotluckService(store, WebSocketHub())
-    item = asyncio.run(service.add_item(b, "Samosa", "http://img/x.png"))
+    item = asyncio.run(service.add_item(b, "Samosa", "Asha", "E1", "2026-10-12", "http://img/x.png"))
     asyncio.run(service.claim_item(b, item.id, "Meena"))
 
     other = PostgresBoardStore(os.environ["DATABASE_URL"])

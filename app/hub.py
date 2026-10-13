@@ -28,11 +28,11 @@ class Connection(Protocol):
 
 
 def item_to_dict(item: Item) -> dict[str, Any]:
-    """Serialize an ``Item`` to a plain JSON-ready dict.
+    """Serialize an ``Item`` to its public JSON-ready dict.
 
-    The derived ``status`` is included (its string value) so clients never have
-    to recompute it. ``claimed_by`` and ``image_url`` are passed through as-is
-    (either a string or ``None``).
+    Explicit allow-list: a field is public only if named here. The employee id
+    is displayed on item cards, so it is public. ``added_by``, ``employee_id``
+    and ``bring_date`` are ``None`` for legacy items.
     """
     return {
         "id": item.id,
@@ -42,6 +42,9 @@ def item_to_dict(item: Item) -> dict[str, Any]:
         "claimed_by": item.claimed_by,
         "created_at": item.created_at,
         "status": item.status.value,
+        "added_by": item.added_by,
+        "employee_id": item.employee_id,
+        "bring_date": item.bring_date,
     }
 
 

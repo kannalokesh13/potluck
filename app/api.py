@@ -19,6 +19,7 @@ import json
 from typing import Any
 
 from fastapi import APIRouter, FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -33,11 +34,27 @@ from .models import BoardState, PersonContribution
 from .service import PotluckService
 
 
-class AddItemRequest(BaseModel):
-    """Body for adding an item. Blank values are rejected by the service."""
+SANITIZED_400 = "The request was not valid. Please check the fields and try again."
 
-    title: str
-    image_url: str | None = None
+
+class AddItemRequest(BaseModel):
+    """Body for adding an item.
+
+    Fields are loosely typed so missing or wrongly typed values reach the
+    service validator and produce a 400 rather than FastAPI's 422.
+    """
+
+    title: Any = None
+    added_by: Any = None
+    employee_id: Any = None
+    bring_date: Any = None
+    image_url: Any = None
+
+
+class DeleteItemRequest(BaseModel):
+    """Body for delete. The employee id is read from the JSON body only."""
+
+    employee_id: Any = None
 
 
 class NameRequest(BaseModel):
@@ -62,6 +79,11 @@ def state_to_dict(state: BoardState) -> dict[str, Any]:
 
 def register_exception_handlers(app: FastAPI) -> None:
     """Register handlers mapping domain errors to HTTP status codes."""
+
+    @app.exception_handler(RequestValidationError)
+    async def _bad_request(_: Request, __: RequestValidationError) -> JSONResponse:
+        # Fixed text: never echo request data (it may contain an employee id).
+        return JSONResponse(status_code=400, content={"detail": SANITIZED_400})
 
     @app.exception_handler(ValidationError)
     async def _validation(_: Request, exc: ValidationError) -> JSONResponse:
@@ -98,7 +120,22 @@ def create_router(service: PotluckService, hub: WebSocketHub) -> APIRouter:
 
     @router.post("/board/{board_id}/items", status_code=201)
     async def add_item(board_id: str, body: AddItemRequest) -> dict[str, Any]:
-        item = await service.add_item(board_id, body.title, body.image_url)
+        item = await service.add_item(
+            board_id,
+            body.title,
+            body.added_by,
+            body.employee_id,
+            body.bring_date,
+            body.image_url,
+        )
+        return item_to_dict(item)
+
+    @router.post("/board/{board_id}/items/{item_id}/delete")
+    async def delete_item(
+        board_id: str, item_id: str, body: DeleteItemRequest | None = None
+    ) -> dict[str, Any]:
+        employee_id = body.employee_id if body is not None else None
+        item = await service.delete_item(board_id, item_id, employee_id)
         return item_to_dict(item)
 
     @router.post("/board/{board_id}/items/{item_id}/claim")

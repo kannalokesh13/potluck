@@ -14,6 +14,7 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
+from tests.conftest import VALID_BODY
 from tests.test_api import build_app
 
 B = "room-1"
@@ -61,7 +62,9 @@ def test_events_reach_all_sockets_and_converge_with_snapshot(env):
         snapshot = client.get(f"/board/{B}/state").json()["items"]
         assert snapshot == []
 
-        item = client.post(f"/board/{B}/items", json={"title": "Biryani"}).json()
+        item = client.post(
+            f"/board/{B}/items", json={**VALID_BODY, "title": "Biryani"}
+        ).json()
         claimed = client.post(
             f"/board/{B}/items/{item['id']}/claim", json={"name": "Ravi"}
         ).json()
@@ -101,7 +104,9 @@ def test_failed_mutations_send_no_event(env):
     client, _hub = env
     with client.websocket_connect(f"/board/{B}/ws") as ws:
         json.loads(ws.receive_text())  # ack
-        item = client.post(f"/board/{B}/items", json={"title": "Dal"}).json()
+        item = client.post(
+            f"/board/{B}/items", json={**VALID_BODY, "title": "Dal"}
+        ).json()
         client.post(f"/board/{B}/items/{item['id']}/claim", json={"name": "Ravi"})
         # Failures: conflict, forbidden, blank title.
         assert client.post(
@@ -110,7 +115,9 @@ def test_failed_mutations_send_no_event(env):
         assert client.post(
             f"/board/{B}/items/{item['id']}/unclaim", json={"name": "Asha"}
         ).status_code == 403
-        assert client.post(f"/board/{B}/items", json={"title": " "}).status_code == 400
+        assert client.post(
+            f"/board/{B}/items", json={**VALID_BODY, "title": " "}
+        ).status_code == 400
         # A final successful mutation: the next event must be this one, proving
         # the failures produced no events in between.
         client.post(f"/board/{B}/items/{item['id']}/unclaim", json={"name": "Ravi"})
@@ -130,9 +137,11 @@ def test_other_board_sockets_only_get_their_own_events(env):
         assert hub.subscriber_count(OTHER) == 1
 
         # Mutate the OTHER board first, then B, then OTHER again.
-        client.post(f"/board/{OTHER}/items", json={"title": "Other-1"})
-        mine = client.post(f"/board/{B}/items", json={"title": "Mine"}).json()
-        client.post(f"/board/{OTHER}/items", json={"title": "Other-2"})
+        client.post(f"/board/{OTHER}/items", json={**VALID_BODY, "title": "Other-1"})
+        mine = client.post(
+            f"/board/{B}/items", json={**VALID_BODY, "title": "Mine"}
+        ).json()
+        client.post(f"/board/{OTHER}/items", json={**VALID_BODY, "title": "Other-2"})
 
         # Board B's socket got exactly one event: its own.
         ev = json.loads(ws_b.receive_text())

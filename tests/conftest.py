@@ -47,6 +47,21 @@ class FakeHub(WebSocketHub):
         await super().broadcast(board_id, event)
 
 
+def add(service, board, title="Dish", by="Asha", emp="E1", date="2026-10-12", image=None):
+    """Add an item through the service from synchronous test code."""
+    import asyncio
+
+    return asyncio.run(service.add_item(board, title, by, emp, date, image))
+
+
+VALID_BODY = {
+    "title": "Dish",
+    "added_by": "Asha",
+    "employee_id": "E1",
+    "bring_date": "2026-10-12",
+}
+
+
 def make_service(hub: WebSocketHub | None = None):
     """Return a fresh (service, store, hub) triple with no shared state."""
     store = InMemoryBoardStore()
