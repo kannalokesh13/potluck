@@ -38,6 +38,8 @@ Settings are environment variables read by `python -m app.main` (HOST and PORT) 
 | `HOST` | `127.0.0.1` | Interface to bind. The app has NO authentication, so only set `HOST=0.0.0.0` on a trusted network. |
 | `PORT` | `8000` | Port to listen on. |
 | `POTLUCK_BOARD_ID` | unset | Pins one stable shared board. Every visit to `/` redirects to `/board/<that id>`, so the office can use a single permanent link. When unset, each visit to `/` creates a new board. |
+| `POTLUCK_TIMEZONE` | `Asia/Kolkata` | IANA timezone that defines "today" for the past-date check and automatic cleanup. An invalid name falls back to the default with a warning. |
+| `POTLUCK_PURGE_MINUTES` | `10` | How often the cleanup runs (minimum 1). Invalid values use the default. |
 
 Examples:
 
@@ -56,6 +58,17 @@ python -m app.main
 macOS / Linux: `POTLUCK_BOARD_ID=pirnav-2026 python -m app.main`.
 
 Note: `HOST` and `PORT` are only read by `python -m app.main`. If you start with `uvicorn`, pass `--host` and `--port` instead.
+
+## Automatic cleanup of past-dated items
+
+Items are deleted automatically once their date has passed:
+
+- An item expires when its date is earlier than today's date in `POTLUCK_TIMEZONE` (default `Asia/Kolkata`). Items dated today stay all day.
+- Claimed items expire too. Legacy items with no date never expire.
+- The cleanup runs once at startup and then every `POTLUCK_PURGE_MINUTES` minutes (default 10). Each removed item is broadcast as an `ItemDeleted` event, so open boards drop the card live.
+- On Render's free plan the service sleeps when idle, so the cleanup also runs when it wakes up.
+- Adding an item with a date in the past is rejected with a 400 ("The date can't be in the past.").
+- On Windows the IANA timezone data comes from the pinned `tzdata` package in `requirements.txt`.
 
 ## How sharing works
 

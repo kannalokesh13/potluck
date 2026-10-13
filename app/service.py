@@ -19,8 +19,11 @@ from __future__ import annotations
 import datetime
 import hmac
 import re
+import asyncio
 import time
-from typing import Any
+from typing import Any, Callable
+
+from .clock import today_in_tz
 
 # Re-export domain exceptions for convenience to service-layer consumers.
 from .exceptions import (  # noqa: F401
@@ -115,9 +118,16 @@ class PotluckService:
     and broadcast a single change event; queries derive read-only views.
     """
 
-    def __init__(self, store: BoardStore, hub: WebSocketHub) -> None:
+    def __init__(
+        self,
+        store: BoardStore,
+        hub: WebSocketHub,
+        today: Callable[[], datetime.date] | None = None,
+    ) -> None:
         self._store = store
         self._hub = hub
+        # Injectable clock: defaults to today's date in the configured timezone.
+        self._today = today if today is not None else today_in_tz
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -167,6 +177,8 @@ class PotluckService:
             employee_id, "Employee ID", EMPLOYEE_ID_MAX
         )
         trimmed_date = _require_date(bring_date, "Date")
+        if trimmed_date < self._today().isoformat():
+            raise ValidationError("The date can't be in the past.")
         if image_url is not None and not isinstance(image_url, str):
             raise ValidationError("Image link must be text.")
 
@@ -369,6 +381,25 @@ class PotluckService:
             board_id, ChangeEvent(ChangeType.ITEM_DELETED, board_id, item)
         )
         return item
+
+    async def purge_expired(self) -> list[Item]:
+        """Delete every item dated before today and broadcast each removal.
+
+        The store call runs in a worker thread so the event loop is not
+        blocked. One ``ItemDeleted`` event is broadcast per removed item; a
+        failing broadcast never stops the others. Idempotent.
+        """
+        cutoff = self._today().isoformat()
+        removed = await asyncio.to_thread(self._store.delete_expired, cutoff)
+        for item in removed:
+            try:
+                await self._hub.broadcast(
+                    item.board_id,
+                    ChangeEvent(ChangeType.ITEM_DELETED, item.board_id, item),
+                )
+            except Exception:
+                pass
+        return removed
 
     # ------------------------------------------------------------------
     # Queries

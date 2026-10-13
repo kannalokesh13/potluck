@@ -254,6 +254,21 @@ class PostgresBoardStore:
             )
             return cur.rowcount > 0
 
+    def delete_expired(self, before_date: str) -> list[Item]:
+        """Delete every item dated strictly before ``before_date`` (all boards).
+
+        Items without a ``bring_date`` are never removed. Returns the removed
+        items so the caller can broadcast them.
+        """
+        with self._connection() as conn:
+            rows = conn.execute(
+                "DELETE FROM potluck_items "
+                "WHERE bring_date IS NOT NULL AND bring_date < %s "
+                f"RETURNING {_ITEM_COLUMNS}",
+                (before_date,),
+            ).fetchall()
+        return [_row_to_item(row) for row in rows]
+
     # ------------------------------------------------------------------
     # Concurrency helper
     # ------------------------------------------------------------------

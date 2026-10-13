@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import os
 
 # Keep the local .env (real database URL, pinned board) out of the test suite so
@@ -62,8 +63,16 @@ VALID_BODY = {
 }
 
 
-def make_service(hub: WebSocketHub | None = None):
-    """Return a fresh (service, store, hub) triple with no shared state."""
+FIXED_TODAY = datetime.date(2000, 1, 1)
+
+
+def make_service(hub: WebSocketHub | None = None, today=None):
+    """Return a fresh (service, store, hub) triple with no shared state.
+
+    The clock is fixed at 2000-01-01 by default so tests with any later date
+    stay deterministic; pass ``today`` (a date) to override it.
+    """
     store = InMemoryBoardStore()
     hub = hub if hub is not None else FakeHub()
-    return PotluckService(store, hub), store, hub
+    day = today if today is not None else FIXED_TODAY
+    return PotluckService(store, hub, today=lambda: day), store, hub

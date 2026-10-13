@@ -7,6 +7,7 @@ and deletes only its own rows afterwards (never TRUNCATE / DROP).
 from __future__ import annotations
 
 import asyncio
+import datetime
 import os
 import secrets
 
@@ -143,7 +144,7 @@ def test_item_lock_same_for_same_item_different_for_others(store):
 
 def test_claim_flow_through_service(store, board_ids):
     b = board_ids()
-    service = PotluckService(store, WebSocketHub())
+    service = PotluckService(store, WebSocketHub(), today=lambda: datetime.date(2000, 1, 1))
 
     item = asyncio.run(service.add_item(b, "  Biryani  ", "Asha", "E1", "2026-10-12", None))
     assert item.title == "Biryani"
@@ -169,7 +170,7 @@ def test_data_persists_across_new_store_instance(store, board_ids):
     from app.pg_store import PostgresBoardStore
 
     b = board_ids()
-    service = PotluckService(store, WebSocketHub())
+    service = PotluckService(store, WebSocketHub(), today=lambda: datetime.date(2000, 1, 1))
     item = asyncio.run(service.add_item(b, "Samosa", "Asha", "E1", "2026-10-12", "http://img/x.png"))
     asyncio.run(service.claim_item(b, item.id, "Meena"))
 
@@ -183,3 +184,24 @@ def test_data_persists_across_new_store_instance(store, board_ids):
         assert items[0].claimed_by == "Meena"
     finally:
         other.close()
+
+
+def test_delete_expired_removes_only_its_own_expired_rows(store, board_ids):
+    """Uses a 2000-01-01 cutoff and its own board so real data is never matched."""
+    b = board_ids()
+
+    def dated(item_id, bring_date):
+        item = _item(item_id, b)
+        item.bring_date = bring_date
+        return item
+
+    store.save_item(b, dated("old", "1999-12-31"))
+    store.save_item(b, dated("edge", "2000-01-01"))
+    store.save_item(b, dated("legacy", None))
+
+    removed = store.delete_expired("2000-01-01")
+
+    mine = [i for i in removed if i.board_id == b]
+    assert [i.id for i in mine] == ["old"]
+    assert mine[0].bring_date == "1999-12-31"
+    assert sorted(i.id for i in store.list_items(b)) == ["edge", "legacy"]

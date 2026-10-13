@@ -10,7 +10,7 @@ from app.api import create_router, register_exception_handlers
 from app.hub import WebSocketHub
 from app.service import PotluckService
 from app.store import InMemoryBoardStore
-from tests.conftest import VALID_BODY
+from tests.conftest import FIXED_TODAY, VALID_BODY
 
 B = "board-x"
 
@@ -18,7 +18,7 @@ B = "board-x"
 def build_app():
     store = InMemoryBoardStore()
     hub = WebSocketHub()
-    service = PotluckService(store, hub)
+    service = PotluckService(store, hub, today=lambda: FIXED_TODAY)
     app = FastAPI()
     register_exception_handlers(app)
     app.include_router(create_router(service, hub))

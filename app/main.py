@@ -11,6 +11,7 @@ Run with either::
 
 from __future__ import annotations
 
+import asyncio
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -81,12 +82,54 @@ hub = WebSocketHub()
 service = PotluckService(store, hub)
 
 
+DEFAULT_PURGE_MINUTES = 10
+
+
+def purge_interval_seconds() -> float:
+    """Seconds between cleanups from ``POTLUCK_PURGE_MINUTES`` (default 10, min 1)."""
+    raw = os.getenv("POTLUCK_PURGE_MINUTES")
+    minutes = DEFAULT_PURGE_MINUTES
+    if raw:
+        try:
+            minutes = max(1, int(raw.strip()))
+        except ValueError:
+            minutes = DEFAULT_PURGE_MINUTES
+    return minutes * 60.0
+
+
+async def _safe_purge() -> None:
+    """Run one cleanup; log (never raise) on failure."""
+    try:
+        removed = await service.purge_expired()
+        if removed:
+            print(f"cleanup: removed {len(removed)} expired item(s)", flush=True)
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        # Only the exception type is logged: messages could carry connection details.
+        print(f"cleanup failed: {type(exc).__name__}", flush=True)
+
+
+async def _purge_loop(interval: float) -> None:
+    """Repeat the cleanup forever; per-cycle errors never kill the loop."""
+    while True:
+        await asyncio.sleep(interval)
+        await _safe_purge()
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    """Close the Postgres pool (if any) on shutdown."""
+    """Purge expired items at startup, then periodically; close the store on exit."""
+    await _safe_purge()
+    task = asyncio.create_task(_purge_loop(purge_interval_seconds()))
     try:
         yield
     finally:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
         close = getattr(store, "close", None)
         if callable(close):
             close()

@@ -16,3 +16,5 @@ services:
       # It must never be committed to the repo.
       - key: DATABASE_URL
         sync: false
+      - key: POTLUCK_TIMEZONE
+        value: Asia/Kolkata

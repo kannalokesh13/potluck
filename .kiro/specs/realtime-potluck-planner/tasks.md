@@ -375,6 +375,16 @@ Tasks 15 onward implement the enhancement (Requirements 9 to 14 plus the amended
   - Ensure all tests pass, ask the user if questions arise.
   - Manual smoke checklist for the user (no browser test runner exists): required fields and inline errors; values retained after a 400; date pre-filled `2026-10-12`; card meta line for new and legacy items; `<`, `>`, `&` in names rendered literally; Delete shown on Available cards only; confirmation flow (no request before Confirm, Cancel sends nothing, legacy hint, focus handling, 10 s timeout by throttling); live card removal in a second browser tab; People view update; employee ID absent from the DOM, `localStorage` and network responses.
 
+- [x] 27. Automatic expiry of past-dated items
+  - [x] 27.1 Clock, store `delete_expired`, service `purge_expired` and past-date validation
+    - `app/clock.py` (`get_timezone`, `today_in_tz`, `POTLUCK_TIMEZONE`, default `Asia/Kolkata`, pinned `tzdata`); `delete_expired(before_date)` on the `BoardStore` protocol, `InMemoryBoardStore` and `PostgresBoardStore`; `PotluckService(today=...)`, `purge_expired()` (worker thread, one `ItemDeleted` per removed item) and `add_item` rejecting past dates with a 400
+  - [x] 27.2 Lifespan scheduler in `app/main.py`
+    - Purge once at startup, then every `POTLUCK_PURGE_MINUTES` (default 10, min 1); errors logged per cycle; task cancelled and awaited on shutdown before the store is closed
+  - [x] 27.3 Tests
+    - `tests/test_expiry.py` (boundary, claimed, legacy, events, idempotence, multi-board, past-date rejection via service and API, timezone, lifespan); Postgres `delete_expired` test in `tests/test_pg_store.py` (skipped without `DATABASE_URL`, not run by this agent); `make_service` now uses a fixed clock (2000-01-01) with a `today` override
+  - [x] 27.4 README
+    - Automatic cleanup section and the two new configuration variables; `POTLUCK_TIMEZONE` added to `render.yaml`
+
 ## Notes
 
 - Tasks marked with `*` are optional (tests) and can be skipped for a faster MVP, but they validate the 8 Correctness Properties and realtime behavior and are recommended.

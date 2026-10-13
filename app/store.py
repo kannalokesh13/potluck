@@ -33,6 +33,8 @@ class BoardStore(Protocol):
 
     def delete_item(self, board_id: str, item_id: str) -> bool: ...
 
+    def delete_expired(self, before_date: str) -> list[Item]: ...
+
 
 def generate_board_id() -> str:
     """Return an unguessable, URL-safe board id.
@@ -142,6 +144,25 @@ class InMemoryBoardStore:
             if bucket is None:
                 return False
             return bucket.pop(item_id, None) is not None
+
+    def delete_expired(self, before_date: str) -> list[Item]:
+        """Remove every item with a ``bring_date`` strictly before ``before_date``.
+
+        Works across all boards (ISO dates compare correctly as strings), keeps
+        the relative order of the remaining items, never touches items whose
+        ``bring_date`` is ``None`` and returns the removed items.
+        """
+        removed: list[Item] = []
+        with self._lock:
+            for bucket in self._items.values():
+                expired_ids = [
+                    item_id
+                    for item_id, item in bucket.items()
+                    if item.bring_date is not None and item.bring_date < before_date
+                ]
+                for item_id in expired_ids:
+                    removed.append(bucket.pop(item_id))
+        return removed
 
     # ------------------------------------------------------------------
     # Concurrency helper

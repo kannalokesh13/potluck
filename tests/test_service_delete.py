@@ -65,7 +65,9 @@ def test_values_at_limits_accepted_and_padded_values_stored_trimmed():
 
 @pytest.mark.parametrize("date", ["2024-02-29", "0001-01-01", "9999-12-31", "2026-01-01"])
 def test_odd_but_real_dates_accepted(date):
-    service, _store, _hub = make_service()
+    import datetime
+
+    service, _store, _hub = make_service(today=datetime.date(1, 1, 1))
     assert add(service, B, date=date).bring_date == date
 
 
